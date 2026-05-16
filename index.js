@@ -2,7 +2,14 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
+
+// Mengamankan library axios agar core system tidak crash jika modul bermasalah
+let axios;
+try {
+  axios = require('axios');
+} catch (e) {
+  console.error('⚠️ [CRITICAL] Library axios belum terinstal. Jalankan: npm install axios');
+}
 
 // Mengabaikan sisa data macet dari server lama
 const bot = new TelegramBot(process.env.BOT_TOKEN, {
@@ -141,9 +148,7 @@ _Pilih interaksi node melalui tombol di bawah ini:_
 });
 
 // -------------------------------------------------------------
-// -------------------------------------------------------------
-// -------------------------------------------------------------
-// AI ASSISTANT COMMAND CENTER (STABLE GEMINI v1beta INTEGRATION)
+// AI ASSISTANT COMMAND CENTER (OFFICIAL GEMINI v1 STABLE)
 // -------------------------------------------------------------
 bot.onText(/\/ask (.+)/i, async (msg, match) => {
   const chatId = String(msg.chat.id).trim();
@@ -152,7 +157,6 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
   verifyUser(chatId, msg.from.first_name);
   bot.sendChatAction(chatId, 'typing');
 
-  // Bersihkan spasi atau tanda kutip liar dari file .env agar tidak bug
   const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.replace(/['"]+/g, '').trim() : '';
 
   if (!apiKey) {
@@ -160,9 +164,9 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
   }
 
   try {
-    // Menggunakan endpoint resmi gemini-1.5-flash versi v1beta (Kompatibilitas Paling Stabil)
+    // FIX: Menggunakan endpoint v1 produksi resmi Google agar terhindar dari 404 model not found
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         contents: [
           {
@@ -176,11 +180,11 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
       },
       {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 15000 // Menambah batas tunggu menjadi 15 detik untuk antisipasi jaringan lambat
+        timeout: 15000
       }
     );
 
-    // Validasi struktur kembalian data dari Google sebelum dikirim ke user
+    // Validasi pemetaan respon dari Google Studio
     if (response.data && response.data.candidates && response.data.candidates[0].content.parts[0].text) {
       const aiAnswer = response.data.candidates[0].content.parts[0].text;
       
@@ -199,8 +203,7 @@ ${aiAnswer.trim()}
     }
 
   } catch (err) {
-    // IMPROVED ERROR HANDLING (Rekomendasi Copilot):
-    // Mencetak log super detail ke terminal Codespaces agar pemilik bot tahu alasan penolakannya
+    // Enhanced Error Handling - Mencetak log detail ke konsol terminal
     console.error('=== GEMINI API ERROR LOG ===');
     if (err.response) {
       console.error('Status Code :', err.response.status);
@@ -210,8 +213,9 @@ ${aiAnswer.trim()}
     }
     console.error('============================');
 
-    // Pesan ramah yang tetap menjaga estetika tampilan bot di Telegram
-    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal memproses data di Google AI Studio.\n\n• Detail: \`${err.response ? err.response.data.error.message : err.message}\`\n\nSilakan hubungi administrator jika masalah berlanjut.`, { parse_mode: 'Markdown' });
+    const errorDetail = err.response && err.response.data && err.response.data.error ? err.response.data.error.message : err.message;
+
+    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal memproses data di Google AI Studio.\n\n• Detail: \`${errorDetail}\`\n\nSilakan hubungi administrator jika masalah berlanjut.`, { parse_mode: 'Markdown' });
   }
 });
 
@@ -239,7 +243,7 @@ bot.on('callback_query', async (query) => {
   const isAdmin = chatId === OWNER_ID;
   const isPremium = user.premiumUntil && new Date() < new Date(user.premiumUntil);
 
-  // 1. Validasi Akses Premium Dedicated Server (Bypass Otomatis Khusus Admin)
+  // 1. Validasi Akses Premium Dedicated Server
   if ((targetDomain === 'outlook.com' || targetDomain === 'yahoo.com') && !isAdmin && !isPremium) {
     return bot.sendMessage(chatId, `
 ⚠️ *SECURITY ACCESS DENIED*
@@ -254,7 +258,7 @@ Gunakan perintah /TopupPoint untuk menghubungi administrasi.
 `, { parse_mode: 'Markdown' });
   }
 
-  // 2. Validasi & Pemotongan Saldo Poin (Bypass Otomatis Khusus Admin)
+  // 2. Validasi & Pemotongan Saldo Poin
   if (targetDomain === 'gmail.com' && !isAdmin) {
     if (user.points < 5) {
       return bot.sendMessage(chatId, `
