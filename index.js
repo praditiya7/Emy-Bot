@@ -141,7 +141,9 @@ _Pilih interaksi node melalui tombol di bawah ini:_
 });
 
 // -------------------------------------------------------------
-// AI ASSISTANT COMMAND CENTER (OFFICIAL GEMINI API - FIXED 404)
+// -------------------------------------------------------------
+// -------------------------------------------------------------
+// AI ASSISTANT COMMAND CENTER (STABLE GEMINI v1beta INTEGRATION)
 // -------------------------------------------------------------
 bot.onText(/\/ask (.+)/i, async (msg, match) => {
   const chatId = String(msg.chat.id).trim();
@@ -150,16 +152,17 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
   verifyUser(chatId, msg.from.first_name);
   bot.sendChatAction(chatId, 'typing');
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  // Bersihkan spasi atau tanda kutip liar dari file .env agar tidak bug
+  const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.replace(/['"]+/g, '').trim() : '';
 
   if (!apiKey) {
     return bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nAPI Key Gemini belum dikonfigurasi di file env oleh pemilik bot.`, { parse_mode: 'Markdown' });
   }
 
   try {
-    // Mengubah endpoint ke versi gemini-pro yang didukung penuh oleh API v1beta
+    // Menggunakan endpoint resmi gemini-1.5-flash versi v1beta (Kompatibilitas Paling Stabil)
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         contents: [
           {
@@ -173,13 +176,15 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
       },
       {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 12000
+        timeout: 15000 // Menambah batas tunggu menjadi 15 detik untuk antisipasi jaringan lambat
       }
     );
 
-    const aiAnswer = response.data.candidates[0].content.parts[0].text || 'Gagal memproses jawaban dari server AI.';
-
-    const replyTemplate = `
+    // Validasi struktur kembalian data dari Google sebelum dikirim ke user
+    if (response.data && response.data.candidates && response.data.candidates[0].content.parts[0].text) {
+      const aiAnswer = response.data.candidates[0].content.parts[0].text;
+      
+      const replyTemplate = `
 🤖 *EMYCMAIL AI ASSISTANT*
 ───────────────────────
 • Question: _${query}_
@@ -188,11 +193,25 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
 ${aiAnswer.trim()}
 ───────────────────────
 `;
-    bot.sendMessage(chatId, replyTemplate, { parse_mode: 'Markdown' });
+      bot.sendMessage(chatId, replyTemplate, { parse_mode: 'Markdown' });
+    } else {
+      throw new Error('Struktur JSON respon tidak sesuai dengan standar Google AI Studio.');
+    }
 
   } catch (err) {
-    console.error('Gemini API Error:', err.response ? err.response.data : err.message);
-    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal memproses data di Google AI Studio. Silakan periksa kembali validitas API Key Anda atau coba sesaat lagi.`, { parse_mode: 'Markdown' });
+    // IMPROVED ERROR HANDLING (Rekomendasi Copilot):
+    // Mencetak log super detail ke terminal Codespaces agar pemilik bot tahu alasan penolakannya
+    console.error('=== GEMINI API ERROR LOG ===');
+    if (err.response) {
+      console.error('Status Code :', err.response.status);
+      console.error('Error Data  :', JSON.stringify(err.response.data, null, 2));
+    } else {
+      console.error('Error Message:', err.message);
+    }
+    console.error('============================');
+
+    // Pesan ramah yang tetap menjaga estetika tampilan bot di Telegram
+    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal memproses data di Google AI Studio.\n\n• Detail: \`${err.response ? err.response.data.error.message : err.message}\`\n\nSilakan hubungi administrator jika masalah berlanjut.`, { parse_mode: 'Markdown' });
   }
 });
 
