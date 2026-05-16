@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 
-// Mengamankan library axios agar core system tidak crash jika modul bermasalah
+// Mengamankan library axios untuk mengambil data email asli
 let axios;
 try {
   axios = require('axios');
@@ -11,7 +11,6 @@ try {
   console.error('⚠️ [CRITICAL] Library axios belum terinstal. Jalankan: npm install axios');
 }
 
-// Mengabaikan sisa data macet dari server lama
 const bot = new TelegramBot(process.env.BOT_TOKEN, {
   polling: {
     params: {
@@ -20,7 +19,6 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, {
   }
 });
 
-// Pembersihan parsing ID untuk mencegah bug tipe data dari file .env
 const OWNER_ID = process.env.OWNER_ID ? process.env.OWNER_ID.replace(/['"]+/g, '').trim() : '';
 const OWNER_USERNAME = 'Emyawu';
 const QRIS_IMAGE_URL = 'https://qu.ax/g1eRh';
@@ -49,29 +47,12 @@ function verifyUser(chatId, firstName) {
     db.users[chatId] = {
       name: firstName || 'User Node',
       points: 20,
-      premiumUntil: null
+      premiumUntil: null,
+      activeEmail: null // Tempat menyimpan session email aktif pengguna
     };
     writeDB(db);
   }
   return db.users[chatId];
-}
-
-// --- GENERATOR CENTER ---
-const aliases = ['andi', 'budi', 'rizky', 'fajar', 'dika', 'reza', 'tomi', 'kevin', 'dewi', 'amanda', 'putri', 'nisa'];
-const suffixes = ['emy', 'emyx', 'zemy', 'cemy', 'xemy', 'emyc', 'emyz'];
-
-function buildVirtualMail(domain) {
-  const name = aliases[Math.floor(Math.random() * aliases.length)];
-  const suff = suffixes[Math.floor(Math.random() * suffixes.length)];
-  const rand = Math.floor(Math.random() * 899) + 100;
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let pass = suff;
-  for (let i = 0; i < 7; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length));
-  
-  return {
-    email: `${name}.${suff}${rand}@${domain}`,
-    password: pass
-  };
 }
 
 // -------------------------------------------------------------
@@ -90,21 +71,21 @@ bot.onText(/\/start/i, (msg) => {
   const menuText = `
 💻 *EMYCMAIL AUTOMATED SYSTEM v3.5*
 ───────────────────────
-Selamat datang, *${msg.from.first_name}*. Sistem siap mengonfigurasi dan mendeploy virtual mail server secara instan.
+Selamat datang, *${msg.from.first_name}*. Jaringan siap mendeploy alamat email sementara nyata secara instan.
 
 *SYSTEM CONFIGURATION*
-• Core API: \`v3.5 / Operational\`
-• Security Node: \`Cloudflare Protected\`
+• Core Mail: \`SecMail API Protected\`
+• Gateway Status: \`Active / Operational\`
 • Account License: *${tier}*
 
 *ACCOUNT BALANCE*
 • Available Balance: *${isAdmin ? 'Unlimited (Admin Mode)' : user.points + ' Points'}*
 
 *SYSTEM PANEL COMMANDS*
-/CreateMailR - Select & deploy virtual mail server
+/CreateMailR - Generate temporary email address
+/CheckInbox - Fetch verification codes & OTP messages
 /CheckPoint - Diagnose database and check balance
 /TopupPoint - Upgrade account tier or recharge balance
-/ask [text] - Interact with EmyCMail AI Assistant
 
 • Network UID: \`${chatId}\`
 ───────────────────────
@@ -119,14 +100,14 @@ bot.onText(/\/CreateMailR/i, (msg) => {
   const menuText = `
 🌐 *DOMAIN DISTRIBUTION CENTER*
 ───────────────────────
-Silakan pilih basis domain server yang ingin diintegrasikan ke jaringan virtual sandbox:
+Silakan pilih basis domain server mail sementara yang ingin diintegrasikan ke akun Anda:
 
 *AVAILABLE MAIL INTERFACES:*
-1. Gmail.com (Free Tier Node)
+1. Secmail.com (Free Tier Node)
    • Cost: 5 Points Allocation
-2. Outlook.com (E-Premium Dedicated Server)
+2. Secmail.net (E-Premium Dedicated Server)
    • Cost: 0 Points (Requires Active Subscription)
-3. Yahoo.com (E-Premium Dedicated Server)
+3. Directmail.top (E-Premium Dedicated Server)
    • Cost: 0 Points (Requires Active Subscription)
 
 _Pilih interaksi node melalui tombol di bawah ini:_
@@ -137,10 +118,10 @@ _Pilih interaksi node melalui tombol di bawah ini:_
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [
-        [{ text: 'Gmail.com (Standard Node)', callback_data: 'core_gmail.com' }],
+        [{ text: 'Secmail.com (Standard Node)', callback_data: 'core_secmail.com' }],
         [
-          { text: 'Outlook.com (E-Premium)', callback_data: 'core_outlook.com' },
-          { text: 'Yahoo.com (E-Premium)', callback_data: 'core_yahoo.com' }
+          { text: 'Secmail.net (E-Premium)', callback_data: 'core_secmail.net' },
+          { text: 'Directmail.top (E-Premium)', callback_data: 'core_directmail.top' }
         ]
       ]
     }
@@ -148,80 +129,58 @@ _Pilih interaksi node melalui tombol di bawah ini:_
 });
 
 // -------------------------------------------------------------
-// AI ASSISTANT COMMAND CENTER (OFFICIAL GEMINI v1 STABLE)
+// REAL-TIME INBOX FETCHER (FITUR UTAMA CEK OTP NYATA)
 // -------------------------------------------------------------
-bot.onText(/\/ask (.+)/i, async (msg, match) => {
+bot.onText(/\/CheckInbox/i, async (msg) => {
   const chatId = String(msg.chat.id).trim();
-  const query = match[1].trim();
+  const user = verifyUser(chatId, msg.from.first_name);
 
-  verifyUser(chatId, msg.from.first_name);
-  bot.sendChatAction(chatId, 'typing');
-
-  const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.replace(/['"]+/g, '').trim() : '';
-
-  if (!apiKey) {
-    return bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nAPI Key Gemini belum dikonfigurasi di file env oleh pemilik bot.`, { parse_mode: 'Markdown' });
+  if (!user.activeEmail) {
+    return bot.sendMessage(chatId, `❌ *INBOX EMPTY*\n\nAnda belum membuat email sementara aktif. Silakan buat terlebih dahulu melalui menu /CreateMailR`, { parse_mode: 'Markdown' });
   }
+
+  bot.sendChatAction(chatId, 'typing');
+  const [login, domain] = user.activeEmail.split('@');
 
   try {
-    // FIX: Menggunakan endpoint v1 produksi resmi Google agar terhindar dari 404 model not found
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        contents: [
-          {
-            parts: [
-              { 
-                text: `Kamu adalah asisten pintar bernama EmyCMail AI. Jawablah pertanyaan berikut dengan singkat, jelas, padat, ramah, dan wajib menggunakan Bahasa Indonesia: ${query}` 
-              }
-            ]
-          }
-        ]
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 15000
-      }
-    );
+    // Meminta daftar surat masuk dari API SecMail asli
+    const response = await axios.get(`https://www.1secmail.com/api/v1/?action=getMessages&login=${login}&domain=${domain}`);
+    const messages = response.data;
 
-    // Validasi pemetaan respon dari Google Studio
-    if (response.data && response.data.candidates && response.data.candidates[0].content.parts[0].text) {
-      const aiAnswer = response.data.candidates[0].content.parts[0].text;
-      
-      const replyTemplate = `
-🤖 *EMYCMAIL AI ASSISTANT*
+    if (!messages || messages.length === 0) {
+      return bot.sendMessage(chatId, `📥 *MAILBOX MONITORING*\n\nEmail: \`${user.activeEmail}\`\nStatus: \`Waiting for incoming OTP/Messages...\`\n\n_Belum ada pesan baru masuk. Silakan kirimkan OTP dari aplikasi tujuan lalu klik /CheckInbox kembali._`, { parse_mode: 'Markdown' });
+    }
+
+    // Mengambil pesan terbaru yang masuk (Paling Atas)
+    const latestMail = messages[0];
+    
+    // Menarik detail isi pesan (body text) berdasarkan ID surat
+    const detailResponse = await axios.get(`https://www.1secmail.com/api/v1/?action=readMessage&login=${login}&domain=${domain}&id=${latestMail.id}`);
+    const mailContent = detailResponse.data;
+
+    // Menghapus tag HTML bawaan email agar rapi saat dibaca di Telegram
+    const cleanText = mailContent.textBody ? mailContent.textBody.replace(/<\/?[^>]+(>|$)/g, "").substring(0, 500) : 'Pesan teks tidak dapat dimuat.';
+
+    const inboxTemplate = `
+📩 *NEW EMAIL ARRIVED SUCCESS*
 ───────────────────────
-• Question: _${query}_
+• *Active Mail:* \`${user.activeEmail}\`
+• *From Sender:* \`${mailContent.from}\`
+• *Subject:* *${mailContent.subject || 'No Subject'}*
+• *Date Received:* \`${mailContent.date}\`
 
-*ANSWER:*
-${aiAnswer.trim()}
+*MESSAGE BODY / OTP CODE:*
+\`\`\`text
+${cleanText.trim()}
+\`\`\`
 ───────────────────────
 `;
-      bot.sendMessage(chatId, replyTemplate, { parse_mode: 'Markdown' });
-    } else {
-      throw new Error('Struktur JSON respon tidak sesuai dengan standar Google AI Studio.');
-    }
+    bot.sendMessage(chatId, inboxTemplate, { parse_mode: 'Markdown' });
 
   } catch (err) {
-    // Enhanced Error Handling - Mencetak log detail ke konsol terminal
-    console.error('=== GEMINI API ERROR LOG ===');
-    if (err.response) {
-      console.error('Status Code :', err.response.status);
-      console.error('Error Data  :', JSON.stringify(err.response.data, null, 2));
-    } else {
-      console.error('Error Message:', err.message);
-    }
-    console.error('============================');
-
-    const errorDetail = err.response && err.response.data && err.response.data.error ? err.response.data.error.message : err.message;
-
-    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal memproses data di Google AI Studio.\n\n• Detail: \`${errorDetail}\`\n\nSilakan hubungi administrator jika masalah berlanjut.`, { parse_mode: 'Markdown' });
+    console.error('Gagal mengambil data inbox:', err.message);
+    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal terhubung ke Mail Server Cloud Node. Silakan coba beberapa saat lagi.`, { parse_mode: 'Markdown' });
   }
-});
-
-bot.onText(/\/ask$/i, (msg) => {
-  const chatId = String(msg.chat.id).trim();
-  bot.sendMessage(chatId, `💡 *INFORMASI INTEGRASI AI*\n\nFormat salah. Silakan ketik perintah diikuti dengan pertanyaan Anda.\n\n• Contoh: \`/ask berikan saya tips belajar javascript\``, { parse_mode: 'Markdown' });
 });
 
 // -------------------------------------------------------------
@@ -244,7 +203,7 @@ bot.on('callback_query', async (query) => {
   const isPremium = user.premiumUntil && new Date() < new Date(user.premiumUntil);
 
   // 1. Validasi Akses Premium Dedicated Server
-  if ((targetDomain === 'outlook.com' || targetDomain === 'yahoo.com') && !isAdmin && !isPremium) {
+  if ((targetDomain === 'secmail.net' || targetDomain === 'directmail.top') && !isAdmin && !isPremium) {
     return bot.sendMessage(chatId, `
 ⚠️ *SECURITY ACCESS DENIED*
 ───────────────────────
@@ -259,7 +218,7 @@ Gunakan perintah /TopupPoint untuk menghubungi administrasi.
   }
 
   // 2. Validasi & Pemotongan Saldo Poin
-  if (targetDomain === 'gmail.com' && !isAdmin) {
+  if (targetDomain === 'secmail.com' && !isAdmin) {
     if (user.points < 5) {
       return bot.sendMessage(chatId, `
 ❌ *RATE LIMIT EXCEEDED*
@@ -274,41 +233,44 @@ Silakan lakukan pengisian saldo melalui menu /TopupPoint.
 `, { parse_mode: 'Markdown' });
     }
     db.users[chatId].points -= 5;
-    writeDB(db);
   }
 
-  // 3. Prosedur Animasi Konsol Mengalir
+  // 3. Prosedur Pembuatan Email Sementara Nyata Langsung Dari API
   try {
-    const liveMsg = await bot.sendMessage(chatId, `\`[SYSTEM PROLOG]\` Connecting to virtual node pool \`${targetDomain}\`...`, { parse_mode: 'Markdown' });
+    const liveMsg = await bot.sendMessage(chatId, `\`[SYSTEM PROLOG]\` Fetching active node pool \`${targetDomain}\`...`, { parse_mode: 'Markdown' });
     const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
-    await delay(700);
-    await bot.editMessageText(`\`[ENCRYPTION]\` Generating cryptographic tokens and hashing access key (SHA-256)...`, { chat_id: chatId, message_id: liveMsg.message_id, parse_mode: 'Markdown' }).catch(() => {});
-
-    await delay(700);
-    await bot.editMessageText(`\`[COMPILING]\` Transmitting payload handshake to SMTP/IMAP network relays...`, { chat_id: chatId, message_id: liveMsg.message_id, parse_mode: 'Markdown' }).catch(() => {});
-
-    await delay(500);
-    const result = buildVirtualMail(targetDomain);
+    await delay(600);
     
+    // Request nama email acak yang valid dari server SecMail
+    const response = await axios.get(`https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1`);
+    const originalEmail = response.data[0]; // Format asli: xxxx@1secmail.com
+    
+    // Menyesuaikan domain dengan yang dipilih pengguna di tombol keyboard
+    const prefix = originalEmail.split('@')[0];
+    const realGeneratedEmail = `${prefix}@${targetDomain}`;
+
+    // Simpan email baru ke session aktif user di database
+    db.users[chatId].activeEmail = realGeneratedEmail;
+    writeDB(db);
+
     const latestDb = readDB();
     const currentPoints = isAdmin ? 'Unlimited (Admin Mode)' : `${latestDb.users[chatId].points} Points`;
 
     const successTemplate = `
-✅ *VIRTUAL MAIL SERVER DEPLOYED SUCCESS*
+✅ *TEMP MAIL SERVER DEPLOYED SUCCESS*
 ───────────────────────
-Alokasi server sandbox virtual berhasil dibangun dan siap digunakan:
+Alamat email sementara nyata berhasil dikonfigurasi dan aktif:
 
-• *Virtual Email:* \`${result.email}\`
-• *Access Password:* \`${result.password}\`
+• *Temporary Email:* \`${realGeneratedEmail}\`
 
 *NODE METADATA LOG*
-• Routing Core: \`${targetDomain.toUpperCase()}\`
-• Session Fee: ${isAdmin ? '0 Points (Bypass)' : 'Deducted Successfully'}
+• Mail Core: \`SECMAIL INTERFACE\`
+• Session Fee: ${isAdmin ? '0 Points (Bypass)' : '5 Points Deducted'}
 • Current Balance: *${currentPoints}*
-• Server Status: \`Active / Operational\`
+• Inbox Status: \`Listening / Listening for OTP\`
 
-_Catatan: Ketuk satu kali pada bagian Email atau Password untuk menyalin data ke clipboard._
+_Salin alamat email di atas, gunakan untuk mendaftar aplikasi, lalu ketik perintah /CheckInbox untuk melihat kode verifikasi yang masuk._
 ───────────────────────
 `;
     await bot.editMessageText(successTemplate, { chat_id: chatId, message_id: liveMsg.message_id, parse_mode: 'Markdown' }).catch(() => {
@@ -316,12 +278,13 @@ _Catatan: Ketuk satu kali pada bagian Email atau Password untuk menyalin data ke
     });
 
   } catch (err) {
-    console.error('Error internal alur animasi callback:', err.message);
+    console.error('Error internal alur API email:', err.message);
+    bot.sendMessage(chatId, `❌ Gagal memproses request pembuatan email ke server pusat. Silakan coba lagi.`, { parse_mode: 'Markdown' });
   }
 });
 
 // -------------------------------------------------------------
-// DIAGNOSTIC COMMANDS
+// DIAGNOSTIC & ADMIN COMMANDS (TETAP DIJAGA)
 // -------------------------------------------------------------
 bot.onText(/\/CheckPoint/i, (msg) => {
   const chatId = String(msg.chat.id).trim();
@@ -339,7 +302,7 @@ Berhasil memuat sinkronisasi metadata enkripsi akun Anda dari awan:
 
 • Point Balance: *${isAdmin ? 'Unlimited (Developer Mode)' : user.points + ' Points'}*
 • E-Premium License: *${statusPrem}*
-• Firewall Node Status: \`Active / Operational\`
+• Active Mail Session: \`${user.activeEmail || 'None Active'}\`
 ───────────────────────
 `, { parse_mode: 'Markdown' });
 });
@@ -355,7 +318,7 @@ Silakan lakukan transaksi penambahan poin lisensi atau aktivasi akun premium mel
 • Lite Node: Rp 5.000 -> +50 Points Allocation
 • Mega Node: Rp 10.000 -> +120 Points Allocation
 • E-PREMIUM NODE: Rp 10.000 -> 14 Days Active
-  _(Akses tanpa batas pembuatan domain Outlook.com & Yahoo.com tanpa potong saldo poin)_
+  _(Akses tanpa batas pembuatan domain Premium tanpa potong saldo poin)_
 
 *TRANSACTION SEQUENCE:*
 1. Pindai kode QRIS Gateway di atas menggunakan aplikasi finansial digital Anda.
@@ -372,9 +335,6 @@ Silakan lakukan transaksi penambahan poin lisensi atau aktivasi akun premium mel
   });
 });
 
-// -------------------------------------------------------------
-// RESTRICTED ADMINISTRATOR COMMAND CENTER
-// -------------------------------------------------------------
 bot.onText(/\/isi (\d+) (\d+)/i, (msg, match) => {
   const chatId = String(msg.chat.id).trim();
   if (chatId !== OWNER_ID) return;
@@ -383,7 +343,7 @@ bot.onText(/\/isi (\d+) (\d+)/i, (msg, match) => {
   const amt = parseInt(match[2]);
 
   const db = readDB();
-  if (!db.users[target]) db.users[target] = { name: 'User Node', points: 20, premiumUntil: null };
+  if (!db.users[target]) db.users[target] = { name: 'User Node', points: 20, premiumUntil: null, activeEmail: null };
   db.users[target].points += amt;
   writeDB(db);
 
@@ -400,7 +360,7 @@ bot.onText(/\/premium (\d+)/i, (msg, match) => {
   exp.setDate(exp.getDate() + 14);
 
   const db = readDB();
-  if (!db.users[target]) db.users[target] = { name: 'User Node', points: 20, premiumUntil: null };
+  if (!db.users[target]) db.users[target] = { name: 'User Node', points: 20, premiumUntil: null, activeEmail: null };
   db.users[target].premiumUntil = exp.toISOString();
   writeDB(db);
 
@@ -411,7 +371,7 @@ bot.onText(/\/premium (\d+)/i, (msg, match) => {
 Portal administrasi pusat telah memperbarui hak izin jaringan akun Anda.
 
 • Active Period: *14 Days / 2 Weeks*
-• Dedicated Domain Routing: \`Outlook.com\` & \`Yahoo.com\` (ENABLED)
+• Dedicated Domain Routing: \`Secmail.net\` & \`Directmail.top\` (ENABLED)
 • Core Calculation: \`Unlimited Nodes Simulation\`
 
 Terima kasih atas kemitraan Anda. Jalur enkripsi premium kini siap dieksekusi di panel /CreateMailR.
