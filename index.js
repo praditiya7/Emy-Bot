@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 
-// Mengamankan library axios untuk mengambil data email asli
+// Mengamankan library axios untuk berkomunikasi dengan API Mail.tm
 let axios;
 try {
   axios = require('axios');
@@ -48,11 +48,22 @@ function verifyUser(chatId, firstName) {
       name: firstName || 'User Node',
       points: 20,
       premiumUntil: null,
-      activeEmail: null // Tempat menyimpan session email aktif pengguna
+      activeEmail: null,       // Menyimpan alamat email aktif
+      activeEmailToken: null   // Menyimpan Bearer JWT Token Mail.tm
     };
     writeDB(db);
   }
   return db.users[chatId];
+}
+
+// Helper untuk membuat string acak (Username & Password Akun Mail.tm)
+function makeRandomString(length) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 // -------------------------------------------------------------
@@ -74,7 +85,7 @@ bot.onText(/\/start/i, (msg) => {
 Selamat datang, *${msg.from.first_name}*. Jaringan siap mendeploy alamat email sementara nyata secara instan.
 
 *SYSTEM CONFIGURATION*
-• Core Mail: \`SecMail API Protected\`
+• Core Mail: \`Mail.tm Official API\`
 • Gateway Status: \`Active / Operational\`
 • Account License: *${tier}*
 
@@ -100,17 +111,12 @@ bot.onText(/\/CreateMailR/i, (msg) => {
   const menuText = `
 🌐 *DOMAIN DISTRIBUTION CENTER*
 ───────────────────────
-Silakan pilih basis domain server mail sementara yang ingin diintegrasikan ke akun Anda:
+Klik tombol di bawah ini untuk meminta alokasi alamat email sementara nyata langsung dari Mail.tm Node:
 
-*AVAILABLE MAIL INTERFACES:*
-1. Secmail.com (Free Tier Node)
-   • Cost: 5 Points Allocation
-2. Secmail.net (E-Premium Dedicated Server)
-   • Cost: 0 Points (Requires Active Subscription)
-3. Directmail.top (E-Premium Dedicated Server)
-   • Cost: 0 Points (Requires Active Subscription)
-
-_Pilih interaksi node melalui tombol di bawah ini:_
+*SYSTEM REGULATION:*
+• Session Cost: 5 Points Allocation
+• Mail Core: \`Mail.tm Core Engine\`
+• Features: \`High-Speed OTP Delivery Enabled\`
 ───────────────────────
 `;
 
@@ -118,73 +124,74 @@ _Pilih interaksi node melalui tombol di bawah ini:_
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [
-        [{ text: 'Secmail.com (Standard Node)', callback_data: 'core_secmail.com' }],
-        [
-          { text: 'Secmail.net (E-Premium)', callback_data: 'core_secmail.net' },
-          { text: 'Directmail.top (E-Premium)', callback_data: 'core_directmail.top' }
-        ]
+        [{ text: '🚀 Generate Temporary Email', callback_data: 'core_mailtm' }]
       ]
     }
   });
 });
 
 // -------------------------------------------------------------
-// REAL-TIME INBOX FETCHER (FITUR UTAMA CEK OTP NYATA)
+// REAL-TIME INBOX FETCHER (OFFICIAL MAIL.TM SCHEMA)
 // -------------------------------------------------------------
 bot.onText(/\/CheckInbox/i, async (msg) => {
   const chatId = String(msg.chat.id).trim();
   const user = verifyUser(chatId, msg.from.first_name);
 
-  if (!user.activeEmail) {
-    return bot.sendMessage(chatId, `❌ *INBOX EMPTY*\n\nAnda belum membuat email sementara aktif. Silakan buat terlebih dahulu melalui menu /CreateMailR`, { parse_mode: 'Markdown' });
+  if (!user.activeEmailToken || !user.activeEmail) {
+    return bot.sendMessage(chatId, `❌ *INBOX EMPTY*\n\nAnda belum membuat email aktif. Silakan buat terlebih dahulu melalui menu /CreateMailR`, { parse_mode: 'Markdown' });
   }
 
   bot.sendChatAction(chatId, 'typing');
-  const [login, domain] = user.activeEmail.split('@');
 
   try {
-    // Meminta daftar surat masuk dari API SecMail asli
-    const response = await axios.get(`https://www.1secmail.com/api/v1/?action=getMessages&login=${login}&domain=${domain}`);
-    const messages = response.data;
+    // 1. Ambil semua daftar pesan masuk dari Mail.tm
+    const response = await axios.get('https://api.mail.tm/messages', {
+      headers: { 'Authorization': `Bearer ${user.activeEmailToken}` }
+    });
+
+    const messages = response.data['hydra:member']; // Format array data bawaan Mail.tm
 
     if (!messages || messages.length === 0) {
-      return bot.sendMessage(chatId, `📥 *MAILBOX MONITORING*\n\nEmail: \`${user.activeEmail}\`\nStatus: \`Waiting for incoming OTP/Messages...\`\n\n_Belum ada pesan baru masuk. Silakan kirimkan OTP dari aplikasi tujuan lalu klik /CheckInbox kembali._`, { parse_mode: 'Markdown' });
+      return bot.sendMessage(chatId, `📥 *MAILBOX MONITORING*\n\nEmail: \`${user.activeEmail}\`\nStatus: \`Waiting for incoming OTP/Messages...\`\n\n_Belum ada pesan baru masuk. Silakan kirimkan OTP dari aplikasi tujuan lalu jalankan /CheckInbox kembali._`, { parse_mode: 'Markdown' });
     }
 
-    // Mengambil pesan terbaru yang masuk (Paling Atas)
-    const latestMail = messages[0];
-    
-    // Menarik detail isi pesan (body text) berdasarkan ID surat
-    const detailResponse = await axios.get(`https://www.1secmail.com/api/v1/?action=readMessage&login=${login}&domain=${domain}&id=${latestMail.id}`);
-    const mailContent = detailResponse.data;
+    // 2. Ambil ID pesan paling terbaru (Paling atas)
+    const latestMailId = messages[0].id;
 
-    // Menghapus tag HTML bawaan email agar rapi saat dibaca di Telegram
-    const cleanText = mailContent.textBody ? mailContent.textBody.replace(/<\/?[^>]+(>|$)/g, "").substring(0, 500) : 'Pesan teks tidak dapat dimuat.';
+    // 3. Tarik detail teks pesan asli secara utuh berdasarkan ID-nya
+    const detailResponse = await axios.get(`https://api.mail.tm/messages/${latestMailId}`, {
+      headers: { 'Authorization': `Bearer ${user.activeEmailToken}` }
+    });
+
+    const mailData = detailResponse.data;
+    const senderName = mailData.from.name || 'No Name';
+    const senderAddress = mailData.from.address;
+    const subject = mailData.subject || 'No Subject';
+    const contentText = mailData.text || 'Isi pesan teks kosong.';
 
     const inboxTemplate = `
 📩 *NEW EMAIL ARRIVED SUCCESS*
 ───────────────────────
 • *Active Mail:* \`${user.activeEmail}\`
-• *From Sender:* \`${mailContent.from}\`
-• *Subject:* *${mailContent.subject || 'No Subject'}*
-• *Date Received:* \`${mailContent.date}\`
+• *From Sender:* \`${senderName}\` <${senderAddress}>
+• *Subject:* *${subject}*
 
 *MESSAGE BODY / OTP CODE:*
 \`\`\`text
-${cleanText.trim()}
+${contentText.trim().substring(0, 600)}
 \`\`\`
 ───────────────────────
 `;
     bot.sendMessage(chatId, inboxTemplate, { parse_mode: 'Markdown' });
 
   } catch (err) {
-    console.error('Gagal mengambil data inbox:', err.message);
-    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal terhubung ke Mail Server Cloud Node. Silakan coba beberapa saat lagi.`, { parse_mode: 'Markdown' });
+    console.error('Error saat cek inbox Mail.tm:', err.message);
+    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal memuat kotak masuk Mail.tm Server Cloud Node. Silakan coba beberapa saat lagi.`, { parse_mode: 'Markdown' });
   }
 });
 
 // -------------------------------------------------------------
-// INTERACTIVE CALLBACK QUERY (ANTI-CONFLICT ENGINE)
+// INTERACTIVE CALLBACK QUERY (MAIL.TM AUTH FLOW)
 // -------------------------------------------------------------
 bot.on('callback_query', async (query) => {
   const chatId = String(query.message.chat.id).trim();
@@ -192,33 +199,16 @@ bot.on('callback_query', async (query) => {
 
   bot.answerCallbackQuery(query.id).catch(() => {});
 
-  if (!data || !data.startsWith('core_')) return;
-  const targetDomain = data.split('_')[1];
+  if (!data || data !== 'core_mailtm') return;
 
   bot.deleteMessage(chatId, query.message.message_id).catch(() => {});
 
   const db = readDB();
-  const user = db.users[chatId] || { points: 0, premiumUntil: null };
+  const user = db.users[chatId] || { points: 0 };
   const isAdmin = chatId === OWNER_ID;
-  const isPremium = user.premiumUntil && new Date() < new Date(user.premiumUntil);
 
-  // 1. Validasi Akses Premium Dedicated Server
-  if ((targetDomain === 'secmail.net' || targetDomain === 'directmail.top') && !isAdmin && !isPremium) {
-    return bot.sendMessage(chatId, `
-⚠️ *SECURITY ACCESS DENIED*
-───────────────────────
-Sistem menolak otentikasi. Jalur server dedicated *${targetDomain}* memerlukan tingkat akun yang lebih tinggi.
-
-• Current License: *Free Tier (Restricted)*
-• Activation Required: *E-Premium*
-
-Gunakan perintah /TopupPoint untuk menghubungi administrasi.
-───────────────────────
-`, { parse_mode: 'Markdown' });
-  }
-
-  // 2. Validasi & Pemotongan Saldo Poin
-  if (targetDomain === 'secmail.com' && !isAdmin) {
+  // Validasi & Pemotongan Poin untuk User Non-Admin
+  if (!isAdmin) {
     if (user.points < 5) {
       return bot.sendMessage(chatId, `
 ❌ *RATE LIMIT EXCEEDED*
@@ -235,23 +225,42 @@ Silakan lakukan pengisian saldo melalui menu /TopupPoint.
     db.users[chatId].points -= 5;
   }
 
-  // 3. Prosedur Pembuatan Email Sementara Nyata Langsung Dari API
   try {
-    const liveMsg = await bot.sendMessage(chatId, `\`[SYSTEM PROLOG]\` Fetching active node pool \`${targetDomain}\`...`, { parse_mode: 'Markdown' });
+    const liveMsg = await bot.sendMessage(chatId, `\`[SYSTEM PROLOG]\` Fetching active domain options from Mail.tm...`, { parse_mode: 'Markdown' });
     const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
-    await delay(600);
-    
-    // Request nama email acak yang valid dari server SecMail
-    const response = await axios.get(`https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1`);
-    const originalEmail = response.data[0]; // Format asli: xxxx@1secmail.com
-    
-    // Menyesuaikan domain dengan yang dipilih pengguna di tombol keyboard
-    const prefix = originalEmail.split('@')[0];
-    const realGeneratedEmail = `${prefix}@${targetDomain}`;
+    // Langkah A: Ambil domain aktif dari Mail.tm
+    const domainsResponse = await axios.get('https://api.mail.tm/domains');
+    const availableDomain = domainsResponse.data['hydra:member'][0].domain;
 
-    // Simpan email baru ke session aktif user di database
-    db.users[chatId].activeEmail = realGeneratedEmail;
+    await delay(300);
+    await bot.editMessageText(`\`[COMPILING]\` Registering secure account resource sandbox...`, { chat_id: chatId, message_id: liveMsg.message_id, parse_mode: 'Markdown' }).catch(() => {});
+
+    // Langkah B: Siapkan Kredensial Unik
+    const randomUser = makeRandomString(9);
+    const randomPass = makeRandomString(12);
+    const generatedEmail = `${randomUser}@${availableDomain}`;
+
+    // Langkah C: Daftarkan akun ke server Mail.tm
+    await axios.post('https://api.mail.tm/accounts', {
+      address: generatedEmail,
+      password: randomPass
+    });
+
+    await delay(300);
+    await bot.editMessageText(`\`[ENCRYPTION]\` Acquiring authorization handshake tokens (JWT Bearer)...`, { chat_id: chatId, message_id: liveMsg.message_id, parse_mode: 'Markdown' }).catch(() => {});
+
+    // Langkah D: Ambil token login JWT Bearer untuk mengecek isi pesan nantinya
+    const tokenResponse = await axios.post('https://api.mail.tm/token', {
+      address: generatedEmail,
+      password: randomPass
+    });
+
+    const tokenJwt = tokenResponse.data.token;
+
+    // Simpan hasil data valid ke file database local
+    db.users[chatId].activeEmail = generatedEmail;
+    db.users[chatId].activeEmailToken = tokenJwt;
     writeDB(db);
 
     const latestDb = readDB();
@@ -262,15 +271,15 @@ Silakan lakukan pengisian saldo melalui menu /TopupPoint.
 ───────────────────────
 Alamat email sementara nyata berhasil dikonfigurasi dan aktif:
 
-• *Temporary Email:* \`${realGeneratedEmail}\`
+• *Temporary Email:* \`${generatedEmail}\`
 
 *NODE METADATA LOG*
-• Mail Core: \`SECMAIL INTERFACE\`
+• Mail Core: \`MAIL.TM POWERED NODE\`
 • Session Fee: ${isAdmin ? '0 Points (Bypass)' : '5 Points Deducted'}
 • Current Balance: *${currentPoints}*
-• Inbox Status: \`Listening / Listening for OTP\`
+• Inbox Status: \`Listening / Waiting for OTP\`
 
-_Salin alamat email di atas, gunakan untuk mendaftar aplikasi, lalu ketik perintah /CheckInbox untuk melihat kode verifikasi yang masuk._
+_Salin alamat email di atas, gunakan untuk mendaftar aplikasi, lalu ketik perintah /CheckInbox untuk melihat kode verifikasi yang masuk secara nyata!_
 ───────────────────────
 `;
     await bot.editMessageText(successTemplate, { chat_id: chatId, message_id: liveMsg.message_id, parse_mode: 'Markdown' }).catch(() => {
@@ -278,13 +287,13 @@ _Salin alamat email di atas, gunakan untuk mendaftar aplikasi, lalu ketik perint
     });
 
   } catch (err) {
-    console.error('Error internal alur API email:', err.message);
-    bot.sendMessage(chatId, `❌ Gagal memproses request pembuatan email ke server pusat. Silakan coba lagi.`, { parse_mode: 'Markdown' });
+    console.error('Error saat integrasi Mail.tm API:', err.message);
+    bot.sendMessage(chatId, `❌ Gagal mengambil email baru dari Mail.tm Server cloud node. Silakan coba lagi beberapa saat lagi.`, { parse_mode: 'Markdown' });
   }
 });
 
 // -------------------------------------------------------------
-// DIAGNOSTIC & ADMIN COMMANDS (TETAP DIJAGA)
+// DIAGNOSTIC & ADMIN COMMAND CENTER (SINKRON)
 // -------------------------------------------------------------
 bot.onText(/\/CheckPoint/i, (msg) => {
   const chatId = String(msg.chat.id).trim();
@@ -343,7 +352,7 @@ bot.onText(/\/isi (\d+) (\d+)/i, (msg, match) => {
   const amt = parseInt(match[2]);
 
   const db = readDB();
-  if (!db.users[target]) db.users[target] = { name: 'User Node', points: 20, premiumUntil: null, activeEmail: null };
+  if (!db.users[target]) db.users[target] = { name: 'User Node', points: 20, premiumUntil: null, activeEmail: null, activeEmailToken: null };
   db.users[target].points += amt;
   writeDB(db);
 
@@ -360,7 +369,7 @@ bot.onText(/\/premium (\d+)/i, (msg, match) => {
   exp.setDate(exp.getDate() + 14);
 
   const db = readDB();
-  if (!db.users[target]) db.users[target] = { name: 'User Node', points: 20, premiumUntil: null, activeEmail: null };
+  if (!db.users[target]) db.users[target] = { name: 'User Node', points: 20, premiumUntil: null, activeEmail: null, activeEmailToken: null };
   db.users[target].premiumUntil = exp.toISOString();
   writeDB(db);
 
@@ -371,7 +380,7 @@ bot.onText(/\/premium (\d+)/i, (msg, match) => {
 Portal administrasi pusat telah memperbarui hak izin jaringan akun Anda.
 
 • Active Period: *14 Days / 2 Weeks*
-• Dedicated Domain Routing: \`Secmail.net\` & \`Directmail.top\` (ENABLED)
+• Dedicated Domain Routing: \`Mail.tm Dedicated Node\` (ENABLED)
 • Core Calculation: \`Unlimited Nodes Simulation\`
 
 Terima kasih atas kemitraan Anda. Jalur enkripsi premium kini siap dieksekusi di panel /CreateMailR.
