@@ -141,7 +141,7 @@ _Pilih interaksi node melalui tombol di bawah ini:_
 });
 
 // -------------------------------------------------------------
-// AI ASSISTANT COMMAND CENTER (OFFICIAL GEMINI API)
+// AI ASSISTANT COMMAND CENTER (OFFICIAL GEMINI API - FIXED 404)
 // -------------------------------------------------------------
 bot.onText(/\/ask (.+)/i, async (msg, match) => {
   const chatId = String(msg.chat.id).trim();
@@ -157,9 +157,9 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
   }
 
   try {
-    // Menembak endpoint resmi Google Gemini 1.5 Flash
+    // Mengubah endpoint ke versi gemini-pro yang didukung penuh oleh API v1beta
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
       {
         contents: [
           {
@@ -192,7 +192,7 @@ ${aiAnswer.trim()}
 
   } catch (err) {
     console.error('Gemini API Error:', err.response ? err.response.data : err.message);
-    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal terhubung ke Google AI Studio. Silakan hubungi admin atau coba sesaat lagi.`, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal memproses data di Google AI Studio. Silakan periksa kembali validitas API Key Anda atau coba sesaat lagi.`, { parse_mode: 'Markdown' });
   }
 });
 
