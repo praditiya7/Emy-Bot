@@ -141,7 +141,7 @@ _Pilih interaksi node melalui tombol di bawah ini:_
 });
 
 // -------------------------------------------------------------
-// AI ASSISTANT COMMAND CENTER
+// AI ASSISTANT COMMAND CENTER (OFFICIAL GEMINI API)
 // -------------------------------------------------------------
 bot.onText(/\/ask (.+)/i, async (msg, match) => {
   const chatId = String(msg.chat.id).trim();
@@ -150,10 +150,34 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
   verifyUser(chatId, msg.from.first_name);
   bot.sendChatAction(chatId, 'typing');
 
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nAPI Key Gemini belum dikonfigurasi di file env oleh pemilik bot.`, { parse_mode: 'Markdown' });
+  }
+
   try {
-    // Jalur Server Utama AI Publik
-    const response = await axios.get(`https://api.chateverywhere.app/v1/chat?prompt=${encodeURIComponent(query)}`, { timeout: 12000 });
-    const aiAnswer = response.data.reply || response.data.choices[0].message.content || 'Gagal memformat struktur jawaban.';
+    // Menembak endpoint resmi Google Gemini 1.5 Flash
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        contents: [
+          {
+            parts: [
+              { 
+                text: `Kamu adalah asisten pintar bernama EmyCMail AI. Jawablah pertanyaan berikut dengan singkat, jelas, padat, ramah, dan wajib menggunakan Bahasa Indonesia: ${query}` 
+              }
+            ]
+          }
+        ]
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 12000
+      }
+    );
+
+    const aiAnswer = response.data.candidates[0].content.parts[0].text || 'Gagal memproses jawaban dari server AI.';
 
     const replyTemplate = `
 🤖 *EMYCMAIL AI ASSISTANT*
@@ -161,32 +185,14 @@ bot.onText(/\/ask (.+)/i, async (msg, match) => {
 • Question: _${query}_
 
 *ANSWER:*
-${aiAnswer}
+${aiAnswer.trim()}
 ───────────────────────
 `;
     bot.sendMessage(chatId, replyTemplate, { parse_mode: 'Markdown' });
 
   } catch (err) {
-    console.error('AI Core API Error, dialihkan ke backup:', err.message);
-    
-    // Jalur Server Cadangan otomatis jika server utama overload
-    try {
-      const backupResponse = await axios.get(`https://api.sandipbbaruwal.com.np/gpt?prompt=${encodeURIComponent(query)}`);
-      const backupAnswer = backupResponse.data.answer;
-
-      const backupTemplate = `
-🤖 *EMYCMAIL AI ASSISTANT*
-───────────────────────
-• Question: _${query}_
-
-*ANSWER:*
-${backupAnswer}
-───────────────────────
-`;
-      bot.sendMessage(chatId, backupTemplate, { parse_mode: 'Markdown' });
-    } catch (backupErr) {
-      bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal terhubung ke gerbang AI Core. Silakan coba beberapa saat lagi.`, { parse_mode: 'Markdown' });
-    }
+    console.error('Gemini API Error:', err.response ? err.response.data : err.message);
+    bot.sendMessage(chatId, `⚠️ *SYSTEM ERROR*\n\nGagal terhubung ke Google AI Studio. Silakan hubungi admin atau coba sesaat lagi.`, { parse_mode: 'Markdown' });
   }
 });
 
