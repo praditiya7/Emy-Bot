@@ -492,50 +492,40 @@ Fitur ini dikunci dan dikhususkan hanya untuk pimpinan tim *System Developer & M
 });
 
 // -------------------------------------------------------------
-// AUXILIARY COMMANDS (DAILY & MISSIONS)
+// AUXILIARY LISTENERS: VERIFIKASI MISI TIKTOK
 // -------------------------------------------------------------
-bot.onText(/\/claimdaily/i, (msg) => {
-  const chatId = String(msg.chat.id).trim();
-  verifyUser(chatId, msg.from.first_name);
-  const db = readDB();
-  db.users[chatId].points += 10;
-  writeDB(db);
-  bot.sendMessage(chatId, `🎁 *DAILY BONUS CLAIMED*\n\nSelamat! Rekening saldo Anda berhasil ditambahkan *+10 Poin* gratis harian.`);
-});
-
-bot.onText(/\/misitiktok/i, (msg) => {
-  const chatId = String(msg.chat.id).trim();
-  const user = verifyUser(chatId, msg.from.first_name);
-  if (user.tiktokClaimed) return bot.sendMessage(chatId, `❌ *MISSION COMPLETED*\n\nAnda sudah menuntaskan jatah hadiah misi ini sebelumnya.`, { parse_mode: 'Markdown' });
-
-  const tiktokText = `
-🎁 *MISI GRATIS BONUS POIN DEVS*
-──────────────────────────────
-Dapatkan bonus reward instan sebesar *+10 Poin* gratis langsung masuk dompet saldo Anda dengan langkah mudah:
-
-1. Kunjungi tautan akun Dev: ${TIKTOK_DEV_URL}
-2. Klik tombol *Follow / Ikuti* akun resmi kami.
-3. Jika sudah selesai, kembali ke bot ini dan klik tombol konfirmasi di bawah ini:
-──────────────────────────────
-`;
-
-  bot.sendMessage(chatId, tiktokText, {
-    parse_mode: 'Markdown',
-    disable_web_page_preview: true,
-    reply_markup: { inline_keyboard: [[{ text: '✅ Confirm To Developer', callback_data: 'tiktok_confirm' }]] }
-  });
-});
-
 bot.on('message', (msg) => {
   const chatId = String(msg.chat.id).trim();
+  
+  // Abaikan jika pesan kosong, atau berupa perintah command (berawalan /)
   if (!msg.text || msg.text.startsWith('/')) return;
+  
+  // Cek apakah user ini sedang dalam status menunggu input username TikTok
   if (missionStorage[chatId] === 'awaiting_tiktok_username') {
     const tkUser = msg.text.trim();
+    
+    // Hapus status standby agar tidak terjadi looping input
     delete missionStorage[chatId];
-    bot.sendMessage(chatId, `🕒 *VERIFIKASI TIKTOK SENT*\n\nBukti akun \`${tkUser}\` sudah dikirimkan. Harap tunggu verifikasi manual owner.`, { parse_mode: 'Markdown' });
-    bot.sendMessage(OWNER_ID, `📢 *KLAIM MISI TIKTOK REQUEST*\n\n• User ID: \`${chatId}\`\n• Akun Bukti TikTok: \`${tkUser}\``, {
+    
+    // Pastikan database user terverifikasi dengan aman
+    verifyUser(chatId, msg.from.first_name);
+    
+    // Kirim notifikasi konfirmasi ke user biasa
+    bot.sendMessage(chatId, `🕒 *VERIFIKASI TIKTOK SENT*\n\nBukti akun \`${tkUser}\` sudah dikirimkan. Harap tunggu proses verifikasi manual oleh Owner.`, { parse_mode: 'Markdown' });
+    
+    // Kirim tombol Approval (Setujui/Tolak) ke Telegram Owner (Kamu)
+    bot.sendMessage(OWNER_ID, `📢 *KLAIM MISI TIKTOK REQUEST*\n\n• *User ID :* \`${chatId}\`\n• *Nama Akun :* ${msg.from.first_name || 'User'}\n• *Bukti TikTok :* \`${tkUser}\``, {
       parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: [[{ text: '✅ Setujui', callback_data: `approve_tk_${chatId}` }, { text: '❌ Tolak', callback_data: `reject_tk_${chatId}` }]] }
+      reply_markup: { 
+        inline_keyboard: [
+          [
+            { text: '✅ Setujui (+10 Poin)', callback_data: `approve_tk_${chatId}` }, 
+            { text: '❌ Tolak', callback_data: `reject_tk_${chatId}` }
+          ]
+        ] 
+      }
+    }).catch((err) => {
+      console.error("Gagal mengirimkan data approval ke Owner. Periksa kembali OWNER_ID Anda!", err.message);
     });
   }
 });
