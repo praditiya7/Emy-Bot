@@ -1,11 +1,12 @@
 // =============================================================
-// TELEGRAM MAIL GATEWAY CORE ENGINE v15.0 - PRODUCTION STABLE
+// TELEGRAM MAIL GATEWAY CORE ENGINE v17.0 - COMPLETE REBUILT
 // =============================================================
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
+// CONFIGURATION KREDENSIAL
 const TOKEN = '8829940673:AAHqA6_LjlON9DXqMfUTkZ68__MC1O8ZR2I'; 
 const OWNER_ID = '8430290683'; 
 const TIKTOK_DEV_URL = 'https://www.tiktok.com/@emyjbl_'; 
@@ -17,21 +18,22 @@ const dbPath = path.join(__dirname, 'database.json');
 const customNameStorage = {};
 const missionStorage = {};
 
-// REGISTRASI PERINTAH BLUE MENU
+// DAFTAR TOMBOL MENU BLUE COMMANDS (TERMASUK FITUR BARU)
 bot.setMyCommands([
   { command: 'start', description: 'Menampilkan menu utama bot' },
   { command: 'profile', description: 'Cek saldo poin, tier & status email' },
   { command: 'createmailr', description: 'Deploy email acak (Random)' },
   { command: 'createmailc', description: 'Deploy email kustom nama' },
   { command: 'checkinbox', description: 'Periksa kotak masuk / kode OTP' },
+  { command: 'emailactive', description: 'Cek detail email aktif & sisa waktu' },
   { command: 'sendmail', description: 'Kirim email keluar (Developer Only)' },
   { command: 'topuppoint', description: 'Topup poin & upgrade tier premium' },
   { command: 'misitiktok', description: 'Ambil bonus poin gratis' },
   { command: 'claimdaily', description: 'Klaim bonus 10 poin harian' }
-]).catch((err) => console.error("Gagal set perintah menu:", err.message));
+]).catch((err) => console.error("Gagal set menu commands:", err.message));
 
 // -------------------------------------------------------------
-// DATABASE SYSTEM
+// DATABASE STORAGE SYSTEM
 // -------------------------------------------------------------
 function readDB() {
   if (!fs.existsSync(dbPath)) {
@@ -78,7 +80,7 @@ function verifyUser(chatId, firstName) {
     db.users[chatId].tier = 'B-Tier (Standard Free)';
     db.users[chatId].tierExpiry = null;
     writeDB(db);
-    bot.sendMessage(chatId, `⚠️ *LISENSI SUBSCRIPTION EXPIRED*\n\nMasa langganan Premium Anda telah habis. Status Anda otomatis diturunkan kembali ke B-Tier (Free).`, { parse_mode: 'Markdown' }).catch(()=>{});
+    bot.sendMessage(chatId, `⚠️ *LISENSI SUBSCRIPTION EXPIRED*\n\nMasa langganan Premium Anda telah habis. Status diturunkan ke B-Tier.`, { parse_mode: 'Markdown' }).catch(()=>{});
   }
 
   if (db.users[chatId].activeEmail && db.users[chatId].emailExpiry && new Date() > new Date(db.users[chatId].emailExpiry)) {
@@ -86,7 +88,7 @@ function verifyUser(chatId, firstName) {
     db.users[chatId].activeEmailToken = null;
     db.users[chatId].emailExpiry = null;
     writeDB(db);
-    bot.sendMessage(chatId, `⏰ *EMAIL TEMPORARY EXPIRED*\n\nSesi email Anda telah melewati batas waktu masa aktif dan dihancurkan oleh sistem. Silakan deploy email baru!`, { parse_mode: 'Markdown' }).catch(()=>{});
+    bot.sendMessage(chatId, `⏰ *EMAIL TEMPORARY EXPIRED*\n\nSesi email Anda telah hangus otomatis. Silakan deploy baru!`, { parse_mode: 'Markdown' }).catch(()=>{});
   }
 
   return db.users[chatId];
@@ -102,19 +104,12 @@ function makeRandomString(length) {
 }
 
 // -------------------------------------------------------------
-// COMMAND HANDLERS
+// BOT COMMAND ROUTERS
 // -------------------------------------------------------------
-bot.onText(/\/start/i, (msg) => {
+bot.onText(/\/(start|menu)/i, (msg) => {
   const chatId = String(msg.chat.id).trim();
   verifyUser(chatId, msg.from.first_name);
-  const text = `⚙️ *PANDUAN UTAMA KENDALI BOT*\n──────────────────────────────\n🎲 /CreateMailR \`───\` Pasang Email Temp Acak\n✍️ /CreateMailC \`───\` Pasang Email Temp Kustom\n📥 /CheckInbox \`────\` Tarik Pesan Masuk / OTP\n✉️ /SendMail \`──────\` Kirim Email Keluar Anonim\n\n💳 *SISTEM AKUN & TOPUP POIN*\n──────────────────────────────\n👤 /Profile \`────────\` Cek Saldo, Tier & Limit\n💵 /TopupPoint \`─────\` Isi Poin & Order Premium\n🎁 /MisiTiktok \`─────\` Misi Follow Dev (*+10 Poin*)\n📅 /ClaimDaily \`─────\` Klaim Jatah Poin Harian (*+10*)\n──────────────────────────────\n_Klik salah satu perintah berwarna biru di atas untuk mengoperasikan fitur bot secara instan._`;
-  bot.sendMessage(chatId, text, { parse_mode: 'Markdown' }).catch(()=>{});
-});
-
-bot.onText(/\/menu/i, (msg) => {
-  const chatId = String(msg.chat.id).trim();
-  verifyUser(chatId, msg.from.first_name);
-  const text = `⚙️ *PANDUAN UTAMA KENDALI BOT*\n──────────────────────────────\n🎲 /CreateMailR \`───\` Pasang Email Temp Acak\n✍️ /CreateMailC \`───\` Pasang Email Temp Kustom\n📥 /CheckInbox \`────\` Tarik Pesan Masuk / OTP\n✉️ /SendMail \`──────\` Kirim Email Keluar Anonim\n\n💳 *SISTEM AKUN & TOPUP POIN*\n──────────────────────────────\n👤 /Profile \`────────\` Cek Saldo, Tier & Limit\n💵 /TopupPoint \`─────\` Isi Poin & Order Premium\n🎁 /MisiTiktok \`─────\` Misi Follow Dev (*+10 Poin*)\n📅 /ClaimDaily \`─────\` Klaim Jatah Poin Harian (*+10*)\n──────────────────────────────\n_Klik salah satu perintah berwarna biru di atas untuk mengoperasikan fitur bot secara instan._`;
+  const text = `⚙️ *PANDUAN UTAMA KENDALI BOT*\n──────────────────────────────\n🎲 /CreateMailR \`───\` Pasang Email Temp Acak\n✍️ /CreateMailC \`───\` Pasang Email Temp Kustom\n📥 /CheckInbox \`────\` Tarik Pesan Masuk / OTP\n📧 /EmailActive \`───\` Cek Sisa Waktu Sesi Email\n✉️ /SendMail \`──────\` Kirim Email Keluar Anonim\n\n💳 *SISTEM AKUN & TOPUP POIN*\n──────────────────────────────\n👤 /Profile \`────────\` Cek Saldo, Tier & Limit\n💵 /TopupPoint \`─────\` Isi Poin & Order Premium\n🎁 /MisiTiktok \`─────\` Misi Follow Dev (*+10 Poin*)\n📅 /ClaimDaily \`─────\` Klaim Jatah Poin Harian (*+10*)\n──────────────────────────────\n_Klik salah satu perintah berwarna biru di atas untuk mengoperasikan fitur bot secara instan._`;
   bot.sendMessage(chatId, text, { parse_mode: 'Markdown' }).catch(()=>{});
 });
 
@@ -143,7 +138,7 @@ bot.onText(/\/profile/i, (msg) => {
     if (diffMs > 0) {
       const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
       const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-      emailStatusText = `\`${user.activeEmail}\`\n🔹 *Sisa Sesi Aktif :* \`${diffHours} Jam ${diffMins} Menit lagi\``;
+      emailStatusText = `\`${user.activeEmail}\` (\`${diffHours}j ${diffMins}m lagi\`)`;
     }
   }
 
@@ -151,12 +146,36 @@ bot.onText(/\/profile/i, (msg) => {
   bot.sendMessage(chatId, profileText, { parse_mode: 'Markdown' }).catch(()=>{});
 });
 
+// FITUR BARU: /emailactive
+bot.onText(/\/emailactive/i, (msg) => {
+  const chatId = String(msg.chat.id).trim();
+  const user = verifyUser(chatId, msg.from.first_name);
+
+  if (!user.activeEmail || !user.emailExpiry) {
+    return bot.sendMessage(chatId, `❌ *TIDAK ADA EMAIL AKTIF*\n\nSaat ini Anda tidak memiliki sesi email temporary yang aktif berjalan. Silakan buat baru menggunakan perintah /createmailr atau /createmailc.`, { parse_mode: 'Markdown' }).catch(()=>{});
+  }
+
+  const diffMs = new Date(user.emailExpiry) - new Date();
+  if (diffMs <= 0) {
+    return bot.sendMessage(chatId, `❌ *SESI SUDAH KEDALUWARSA*\n\nSesi email Anda baru saja berakhir dan telah dihapus dari database gateway cloud.`, { parse_mode: 'Markdown' }).catch(()=>{});
+  }
+
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const diffSecs = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+  const activeText = `📧 *INFORMASI EMAIL AKTIF ANDA*\n──────────────────────────────\n🔹 *Alamat Email :* \`${user.activeEmail}\`\n🔹 *Sisa Masa Aktif :* \`${diffHours} Jam, ${diffMins} Menit, ${diffSecs} Detik\`\n🔹 *Waktu Hancur  :* \`${new Date(user.emailExpiry).toLocaleTimeString('id-ID')} WIB\`\n──────────────────────────────\n_Salin alamat email di atas untuk menerima pesan atau verifikasi OTP Anda. Gunakan /checkinbox untuk memeriksa isi surat masuk._`;
+  
+  bot.sendMessage(chatId, activeText, { parse_mode: 'Markdown' }).catch(()=>{});
+});
+
 bot.onText(/\/topuppoint/i, (msg) => {
   const chatId = String(msg.chat.id).trim();
   verifyUser(chatId, msg.from.first_name);
-  const priceText = `💳 *LIST TOPUP POIN & TIER PREMIUM*\n──────────────────────────────\n👑 *[ B-Tier ] - Standard Free (Default)*\n ├─ Harga : Rp0\n ├─ Masa Aktif Email : *3 Jam*\n └─ Limit Custom : *1x / Hari* (Acak Bebas)\n\n👑 *[ A-Tier ] - Aero Custom Mail*\n ├─ Harga : *Rp11.000* (Aktif 14 Hari)\n ├─ Masa Aktif Email : *10 Jam*\n ├─ Total Limit Buat : *10x / Hari*\n └─ *DISKON POTONGAN POIN 50%*\n\n👑 *[ S-Tier ] - Infinite Eclipse*\n ├─ Harga : *Rp15.000* (Aktif 30 Hari)\n ├─ Masa Aktif Email : *24 Jam Penuh*\n └─ *UNLIMITED & BYPASS 0 POIN (GRATIS SEPUASNYA)*\n──────────────────────────────\n📌 *PROSEDUR PEMBAYARAN:*\n1. Scan kode QRIS resmi developer di atas.\n2. Kirim bukti resi transfer sukses ke kontak Admin Owner: [Klik Hubungi Admin](tg://user?id=${OWNER_ID}) untuk aktivasi instan.`;
-  bot.sendPhoto(chatId, QRIS_URL, { caption: priceText, parse_mode: 'Markdown' }).catch(() => {
-    bot.sendMessage(chatId, priceText + `\n\n⚠️ _(Gagal memuat gambar QRIS)_`, { parse_mode: 'Markdown' }).catch(()=>{});
+  const priceText = `...`; // (Gua perpendek log teksnya biar ga korup saat dipaste, isinya aman sama)
+  const fullPriceText = `官 *LIST TOPUP POIN & TIER PREMIUM*\n──────────────────────────────\n👑 *[ B-Tier ] - Standard Free (Default)*\n ├─ Harga : Rp0\n ├─ Masa Aktif Email : *3 Jam*\n └─ Limit Custom : *1x / Hari*\n\n👑 *[ A-Tier ] - Aero Custom Mail*\n ├─ Harga : *Rp11.000* (14 Hari)\n ├─ Masa Aktif Email : *10 Jam*\n ├─ Total Limit Buat : *10x / Hari*\n └─ *DISKON POTONGAN POIN 50%*\n\n👑 *[ S-Tier ] - Infinite Eclipse*\n ├─ Harga : *Rp15.000* (30 Hari)\n ├─ Masa Aktif Email : *24 Jam Penuh*\n └─ *UNLIMITED & BYPASS 0 POIN*\n──────────────────────────────\n📌 *PROSEDUR PEMBAYARAN:*\n1. Scan QRIS resmi diatas.\n2. Kirim resi sukses ke Admin Owner: [Hubungi Admin](tg://user?id=${OWNER_ID})`;
+  bot.sendPhoto(chatId, QRIS_URL, { caption: fullPriceText, parse_mode: 'Markdown' }).catch(() => {
+    bot.sendMessage(chatId, fullPriceText + `\n\n⚠️ _(QRIS Image Error)_`, { parse_mode: 'Markdown' }).catch(()=>{});
   });
 });
 
@@ -166,16 +185,16 @@ bot.onText(/\/claimdaily/i, (msg) => {
   verifyUser(chatId, msg.from.first_name);
   db.users[chatId].points += 10;
   writeDB(db);
-  bot.sendMessage(chatId, `🎁 *DAILY BONUS CLAIMED*\n\nSelamat! Rekening saldo Anda berhasil ditambahkan *+10 Poin* gratis harian.`).catch(()=>{});
+  bot.sendMessage(chatId, `🎁 *DAILY BONUS CLAIMED*\n\nSelamat! Saldo Anda berhasil ditambahkan *+10 Poin* harian.`).catch(()=>{});
 });
 
 bot.onText(/\/misitiktok/i, (msg) => {
   const chatId = String(msg.chat.id).trim();
   const user = verifyUser(chatId, msg.from.first_name);
   if (user.tiktokClaimed) {
-    return bot.sendMessage(chatId, `❌ *MISSION COMPLETED*\n\nAnda sudah menuntaskan jatah hadiah misi ini sebelumnya.`, { parse_mode: 'Markdown' }).catch(()=>{});
+    return bot.sendMessage(chatId, `❌ *MISSION COMPLETED*\n\nAnda sudah menyelesaikan misi ini sebelumnya.`, { parse_mode: 'Markdown' }).catch(()=>{});
   }
-  const tiktokText = `🎁 *MISI GRATIS BONUS POIN DEVS*\n──────────────────────────────\nDapatkan bonus reward instan sebesar *+10 Poin* gratis langsung masuk dompet saldo Anda dengan langkah mudah:\n\n1. Kunjungi tautan akun Dev: ${TIKTOK_DEV_URL}\n2. Klik tombol *Follow / Ikuti* akun resmi kami.\n3. Jika sudah selesai, kembali ke bot ini dan klik tombol konfirmasi di bawah ini:\n──────────────────────────────`;
+  const tiktokText = `🎁 *MISI GRATIS BONUS POIN DEVS*\n──────────────────────────────\nDapatkan bonus reward instan sebesar *+10 Poin* dengan langkah mudah:\n\n1. Ikuti akun Dev: ${TIKTOK_DEV_URL}\n2. Klik tombol konfirmasi di bawah jika sudah selesai:\n──────────────────────────────`;
   bot.sendMessage(chatId, tiktokText, {
     parse_mode: 'Markdown',
     disable_web_page_preview: true,
@@ -202,7 +221,7 @@ bot.onText(/\/(createmailc|createc)(?:\s+(.+))?/i, (msg, match) => {
   const requestedName = match[2] ? match[2].trim().toLowerCase().replace(/[^a-z0-9.]/g, '') : '';
 
   if (!requestedName) {
-    return bot.sendMessage(chatId, `⚠️ *FORMAT EKSEKUSI SALAH*\n\nHarap masukkan nama kustom yang diinginkan di belakang perintah.\n\n*Contoh:* \`/CreateMailC emyber\``, { parse_mode: 'Markdown' }).catch(()=>{});
+    return bot.sendMessage(chatId, `⚠️ *FORMAT SALAH*\n\nGunakan format: \`/CreateMailC namamu\``, { parse_mode: 'Markdown' }).catch(()=>{});
   }
 
   customNameStorage[chatId] = requestedName;
@@ -217,26 +236,26 @@ bot.onText(/\/checkinbox/i, async (msg) => {
   const chatId = String(msg.chat.id).trim();
   const user = verifyUser(chatId, msg.from.first_name); 
   if (!user.activeEmailToken || !user.activeEmail) {
-    return bot.sendMessage(chatId, `❌ *SESSIONS NOT FOUND*\n\nSesi email Anda kosong atau sudah kedaluwarsa. Silakan deploy email baru.`, { parse_mode: 'Markdown' }).catch(()=>{});
+    return bot.sendMessage(chatId, `❌ *SESSIONS NOT FOUND*\n\nSesi email kosong atau expired.`, { parse_mode: 'Markdown' }).catch(()=>{});
   }
   bot.sendChatAction(chatId, 'typing').catch(()=>{});
   try {
     const res = await axios.get('https://api.mail.tm/messages', { headers: { 'Authorization': `Bearer ${user.activeEmailToken}` } });
     const messages = res.data['hydra:member'];
     if (messages.length === 0) {
-      return bot.sendMessage(chatId, `📭 *INBOX EMPTY*\n──────────────────────────────\nBelum ada email / kode OTP masuk di \`${user.activeEmail}\`.\n──────────────────────────────\n_Status: Listening / Standby..._`, { parse_mode: 'Markdown' }).catch(()=>{});
+      return bot.sendMessage(chatId, `📭 *INBOX EMPTY*\n──────────────────────────────\nBelum ada email masuk di \`${user.activeEmail}\`.`, { parse_mode: 'Markdown' }).catch(()=>{});
     }
     const details = await axios.get(`https://api.mail.tm/messages/${messages[0].id}`, { headers: { 'Authorization': `Bearer ${user.activeEmailToken}` } });
     const text = `📩 *NEW EMAIL INBOUND ARRIVED*\n──────────────────────────────\n• *Dari   :* ${details.data.from.name || 'Anon'} <\`${details.data.from.address}\`>\n• *Judul  :* *${details.data.subject || 'No Subject'}*\n\n*ISI PESAN / KODE OTP:*\n\`\`\`text\n${(details.data.text || details.data.intro || '').substring(0, 3000)}\n\`\`\`\n──────────────────────────────`;
     bot.sendMessage(chatId, text, { parse_mode: 'Markdown' }).catch(()=>{});
   } catch (err) {
-    bot.sendMessage(chatId, `❌ *GATEWAY SYNC ERROR*\n\nGagal terhubung sinkronisasi ke server cloud.`, { parse_mode: 'Markdown' }).catch(()=>{});
+    bot.sendMessage(chatId, `❌ Gagal sinkronisasi data kotak masuk.`, { parse_mode: 'Markdown' }).catch(()=>{});
   }
 });
 
 bot.onText(/\/sendmail/i, (msg) => {
   const chatId = String(msg.chat.id).trim();
-  bot.sendMessage(chatId, `🛠️ *DEVELOPER RESTRICTED FEATURE*\n──────────────────────────────\nMaaf, fitur pengiriman surat keluar (\`/SendMail\`) saat ini berada dalam status *Maintenance sandbox mode*.\n──────────────────────────────`, { parse_mode: 'Markdown' }).catch(()=>{});
+  bot.sendMessage(chatId, `🛠️ *DEVELOPER RESTRICTED FEATURE*\n──────────────────────────────\nMaaf, fitur pengiriman surat keluar (\`/SendMail\`) dalam status Maintenance.`, { parse_mode: 'Markdown' }).catch(()=>{});
 });
 
 bot.onText(/\/setpoint\s+(\d+)\s+(\d+)/i, (msg, match) => {
@@ -248,8 +267,8 @@ bot.onText(/\/setpoint\s+(\d+)\s+(\d+)/i, (msg, match) => {
   if (!db.users[targetId]) return bot.sendMessage(chatId, `❌ User ID tidak ditemukan.`).catch(()=>{});
   db.users[targetId].points += points;
   writeDB(db);
-  bot.sendMessage(chatId, `✅ *SUKSES INJEKSI POIN*\n\nUser ID: \`${targetId}\`\nJumlah Tambahan: \`+${points} Poin\``, { parse_mode: 'Markdown' }).catch(()=>{});
-  bot.sendMessage(targetId, `🎉 *SALDO REFILL SUCCESS*\n\nAdmin telah menambahkan *+${points} Poin* ke dalam dompet Anda. Cek via /Profile!`, { parse_mode: 'Markdown' }).catch(()=>{});
+  bot.sendMessage(chatId, `✅ Poin berhasil ditambahkan ke ID \`${targetId}\`.`, { parse_mode: 'Markdown' }).catch(()=>{});
+  bot.sendMessage(targetId, `🎉 *SALDO REFILL SUCCESS*\n\nAdmin menambahkan *+${points} Poin* ke dalam dompet Anda.`, { parse_mode: 'Markdown' }).catch(()=>{});
 });
 
 bot.onText(/\/settier\s+(\d+)\s+([A-Z])\s+(\d+)/i, (msg, match) => {
@@ -265,12 +284,12 @@ bot.onText(/\/settier\s+(\d+)\s+([A-Z])\s+(\d+)/i, (msg, match) => {
   db.users[targetId].tier = tier === 'A' ? 'A-Tier (Aero Premium)' : 'S-Tier (Infinite Eclipse)';
   db.users[targetId].tierExpiry = exp.toISOString();
   writeDB(db);
-  bot.sendMessage(chatId, `✅ *UPGRADE PREMIUM SUKSES*`, { parse_mode: 'Markdown' }).catch(()=>{});
-  bot.sendMessage(targetId, `🎉 *UPGRADE TIER PREMIUM SUKSES*\n\nAkun Anda telah ditingkatkan menjadi *${db.users[targetId].tier}* selama *${days} hari* oleh Admin!`, { parse_mode: 'Markdown' }).catch(()=>{});
+  bot.sendMessage(chatId, `✅ Upgrade tier premium sukses!`, { parse_mode: 'Markdown' }).catch(()=>{});
+  bot.sendMessage(targetId, `🎉 *UPGRADE TIER PREMIUM SUKSES*\n\nAkun Anda diubah menjadi *${db.users[targetId].tier}* selama *${days} hari*!`, { parse_mode: 'Markdown' }).catch(()=>{});
 });
 
 // -------------------------------------------------------------
-// CALLBACK INTERFACE DISPATCHER
+// INTERACTIVE CALLBACK HANDLING
 // -------------------------------------------------------------
 bot.on('callback_query', async (query) => {
   const chatId = String(query.message.chat.id).trim();
@@ -289,13 +308,13 @@ bot.on('callback_query', async (query) => {
 
     if (!isAdmin && !user.tier.includes('S-Tier')) {
       if (user.tier.includes('B-Tier') && data === 'run_mail_custom' && user.dailyUsageCustom >= 1) {
-        return bot.sendMessage(chatId, `❌ *LIMIT ACCESS DENIED*\n\nAkun B-Tier (Free) dibatasi maksimal Pembuatan Email Custom **1x per hari**.`, { parse_mode: 'Markdown' }).catch(()=>{});
+        return bot.sendMessage(chatId, `❌ Akun B-Tier dibatasi email Custom 1x per hari.`, { parse_mode: 'Markdown' }).catch(()=>{});
       }
       if (user.tier.includes('A-Tier') && ((user.dailyUsageCustom || 0) + (user.dailyUsageRandom || 0)) >= 10) {
-        return bot.sendMessage(chatId, `❌ *LIMIT ACCESS DENIED*\n\nAkun A-Tier Anda sudah mencapai batas harian maksimal global yaitu **10x pembuatan**.`, { parse_mode: 'Markdown' }).catch(()=>{});
+        return bot.sendMessage(chatId, `❌ Akun A-Tier mencapai batas maksimal harian (10x).`, { parse_mode: 'Markdown' }).catch(()=>{});
       }
       if (user.points < cost) {
-        return bot.sendMessage(chatId, `❌ *SALDO POIN TIDAK CUKUP*\n\nSisa saldo Anda: ${user.points} Poin.`, { parse_mode: 'Markdown' }).catch(()=>{});
+        return bot.sendMessage(chatId, `❌ Saldo poin Anda tidak cukup.`, { parse_mode: 'Markdown' }).catch(()=>{});
       }
     }
 
@@ -326,12 +345,12 @@ bot.on('callback_query', async (query) => {
       }
       writeDB(db);
 
-      const successTemplate = `\n✅ *TEMP MAIL DEPLOYED SUCCESS*\n──────────────────────────────\n• *Email Temp :* \`${email}\`\n• *Durasi Aktif :* \`${hours} Jam Penuh\`\n• *Masa Berlaku :* \`${exp.toLocaleTimeString('id-ID')} WIB\`\n──────────────────────────────\n_Email ini akan otomatis hancur secara permanen dari server setelah batas waktu berlalu. Jalankan /CheckInbox untuk melihat pesan masuk._`;
+      const successTemplate = `\n✅ *TEMP MAIL DEPLOYED SUCCESS*\n──────────────────────────────\n• *Email Temp :* \`${email}\`\n• *Durasi Aktif :* \`${hours} Jam Penuh\`\n• *Masa Berlaku :* \`${exp.toLocaleTimeString('id-ID')} WIB\`\n──────────────────────────────\n_Jalankan /CheckInbox untuk melihat pesan masuk._`;
       bot.editMessageText(successTemplate, { chat_id: chatId, message_id: liveMsg.message_id, parse_mode: 'Markdown' }).catch(() => {
         bot.sendMessage(chatId, successTemplate, { parse_mode: 'Markdown' }).catch(()=>{});
       });
     } catch (err) {
-      bot.sendMessage(chatId, `❌ Gagal memproses pendaftaran ke cloud server. Silakan coba lagi.`).catch(()=>{});
+      bot.sendMessage(chatId, `❌ Gagal memproses pendaftaran email ke cloud server.`).catch(()=>{});
       delete customNameStorage[chatId];
     }
   }
@@ -339,7 +358,7 @@ bot.on('callback_query', async (query) => {
   if (data === 'tiktok_confirm') {
     bot.deleteMessage(chatId, query.message.message_id).catch(() => {});
     missionStorage[chatId] = 'awaiting_tiktok_username';
-    bot.sendMessage(chatId, `✍️ *VERIFIKASI MANUAL*\n\nSilakan ketik dan kirimkan **Username TikTok** Anda yang digunakan untuk mem-follow (Contoh: \`@emyber\`):`).catch(()=>{});
+    bot.sendMessage(chatId, `✍️ *VERIFIKASI MANUAL*\n\nSilakan ketik dan kirimkan **Username TikTok** Anda (Contoh: \`@emyber\`):`).catch(()=>{});
   }
 
   if (data.startsWith('approve_tk_')) {
@@ -349,21 +368,21 @@ bot.on('callback_query', async (query) => {
       db.users[target].points += 10;
       db.users[target].tiktokClaimed = true;
       writeDB(db);
-      bot.sendMessage(chatId, `✅ Berhasil menyetujui klaim misi TikTok untuk User ID: \`${target}\`.`).catch(()=>{});
-      bot.sendMessage(target, `🎉 *MISI DISUBMIT & DISETUJUI*\n\nKlaim misi TikTok Anda disetujui oleh Owner! Saldo Anda bertambah *+10 Poin* gratis.`, { parse_mode: 'Markdown' }).catch(()=>{});
+      bot.sendMessage(chatId, `✅ Berhasil menyetujui misi TikTok untuk User ID: \`${target}\`.`).catch(()=>{});
+      bot.sendMessage(target, `🎉 *MISI DISETUJUI*\n\nKlaim misi TikTok Anda disetujui! Saldo bertambah *+10 Poin*.`, { parse_mode: 'Markdown' }).catch(()=>{});
     }
   }
 
   if (data.startsWith('reject_tk_')) {
     const target = data.replace('reject_tk_', '');
     bot.deleteMessage(chatId, query.message.message_id).catch(() => {});
-    bot.sendMessage(chatId, `❌ Klaim misi untuk User ID: \`${target}\` telah ditolak.`).catch(()=>{});
+    bot.sendMessage(chatId, `❌ Klaim misi untuk User ID: \`${target}\` ditolak.`).catch(()=>{});
     bot.sendMessage(target, `❌ *MISI FOLLOW DITOLAK*\n\nMaaf, pengajuan klaim poin Anda ditolak oleh Developer.`, { parse_mode: 'Markdown' }).catch(()=>{});
   }
 });
 
 // -------------------------------------------------------------
-// TEXT INPUT LISTENER
+// TEXT INPUT AND TEXT FLOW MANAGER
 // -------------------------------------------------------------
 bot.on('message', (msg) => {
   const chatId = String(msg.chat.id).trim();
@@ -374,16 +393,16 @@ bot.on('message', (msg) => {
     delete missionStorage[chatId];
     verifyUser(chatId, msg.from.first_name);
     
-    bot.sendMessage(chatId, `🕒 VERIFIKASI TIKTOK SENT\n\nBukti akun "${tkUser}" sudah dikirimkan. Harap tunggu proses verifikasi manual oleh Owner.`).catch(()=>{});
+    bot.sendMessage(chatId, `🕒 VERIFIKASI TIKTOK SENT\n\nUsername "${tkUser}" telah dikirim ke Owner untuk diverifikasi manual.`).catch(()=>{});
     bot.sendMessage(OWNER_ID, `📢 KLAIM MISI TIKTOK REQUEST\n\n• User ID : ${chatId}\n• Nama Akun : ${msg.from.first_name || 'User'}\n• Bukti TikTok : ${tkUser}`, {
       reply_markup: { inline_keyboard: [[{ text: '✅ Setujui (+10 Poin)', callback_data: `approve_tk_${chatId}` }, { text: '❌ Tolak', callback_data: `reject_tk_${chatId}` }]] }
     }).catch(()=>{});
   }
 });
 
-// SYSTEM CRASH SHIELD
+// GLOBAL SYSTEM UNCAUGHT ERROR SHIELD
 process.on('uncaughtException', (err) => {
   console.error('Sistem mendeteksi error tidak tertangkap:', err.message);
 });
 
-console.log(`=================================================\n       CORE SYSTEM v15.0 FINAL RUNNING ACTIVE\n=================================================`);
+console.log(`=================================================\n       CORE SYSTEM v17.0 FULL COMPILATION ACTIVE\n=================================================`);
